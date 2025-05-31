@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from models import Base
 from database import engine
-
 from routers.auth import router as auth
 from routers.todo import router as todo
 
