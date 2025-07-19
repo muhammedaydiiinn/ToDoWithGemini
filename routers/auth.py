@@ -1,10 +1,10 @@
-from http.client import HTTPException
 from symtable import Class
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from jose import jwt, JWTError
 from pydantic import BaseModel
+from starlette import status
 
 from models import User
 from typing import Annotated
@@ -66,24 +66,19 @@ def authanticate_user(username: str, password: str, db):
 outh_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 async def get_current_user(token: Annotated[str, Depends(outh_bearer)], db: db_dependency):
-    credentials_exception = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        user_id: int = payload.get("user_id")
-        role: str = payload.get("role")
-        if username is None or user_id is None or role is None:
-            raise credentials_exception
+        username = payload.get("sub")
+        user_id = payload.get("user_id")
+        role = payload.get("role")
+        if username is None or user_id is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+        user = db.query(User).filter(User.username == username, User.id == user_id).first()
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+        return {"username": username, "user_id": user_id, "role": role}
     except JWTError:
-        raise credentials_exception
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise credentials_exception
-    return user
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
 
 @router.post("/register")
 async def register(create_user_request: CreateUserRequest, db: db_dependency):

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from models import Todo
 from sqlalchemy.orm import Session
 from typing import Annotated
+from routers.auth import get_current_user
 router = APIRouter()
 
 
@@ -15,7 +16,7 @@ def get_db():
         db.close()
 
 db_dependency = Annotated[Session, Depends(get_db)]
-
+user_dependency = Annotated[dict, Depends(get_current_user)]
 class TodoRequest(BaseModel):
     title: str = Field(min_length=3, max_length=1000)
     description: str | None = None
@@ -23,18 +24,18 @@ class TodoRequest(BaseModel):
     completed: bool = Field(default=False)
 
 @router.get("/read_all")
-async def read_all(db: db_dependency):
+async def read_all(user: user_dependency, db: db_dependency):
     return db.query(Todo).all()
 
 @router.get("/get_by_id/{todo_id}",status_code=status.HTTP_200_OK)
-async def get_by_id(db: db_dependency,todo_id: int = Path(gt=0)):
+async def get_by_id(user: user_dependency,db: db_dependency,todo_id: int = Path(gt=0)):
     todo = db.query(Todo).filter(Todo.id == todo_id).first()
     if not todo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Todo not found")
     return todo
 
 @router.post("/create_todo", status_code=status.HTTP_201_CREATED)
-async def create_todo(todo: TodoRequest, db: db_dependency):
+async def create_todo(user: user_dependency,todo: TodoRequest, db: db_dependency):
     todo = Todo(**todo.dict())
     db.add(todo)
     db.commit()
@@ -42,7 +43,7 @@ async def create_todo(todo: TodoRequest, db: db_dependency):
     return todo
 
 @router.put("/update_todo/{todo_id}", status_code=status.HTTP_200_OK)
-async def update_todo( todo: TodoRequest, db: db_dependency,todo_id: int =Path(ge=0)):
+async def update_todo( user: user_dependency,todo: TodoRequest, db: db_dependency,todo_id: int =Path(ge=0)):
     existing_todo = db.query(Todo).filter(Todo.id == todo_id).first()
     if not existing_todo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Todo not found")
@@ -55,7 +56,7 @@ async def update_todo( todo: TodoRequest, db: db_dependency,todo_id: int =Path(g
     return existing_todo
 
 @router.delete("/delete_todo/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_todo(db: db_dependency, todo_id: int = Path(gt=0)):
+async def delete_todo(user: user_dependency,db: db_dependency, todo_id: int = Path(gt=0)):
     todo = db.query(Todo).filter(Todo.id == todo_id).first()
     if not todo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Todo not found")
